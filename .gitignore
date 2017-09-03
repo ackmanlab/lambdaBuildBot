@@ -1,0 +1,8 @@
+.DS_Store
+.env
+deploy.env
+event.json
+event_sources.json
+.lambda
+node_modules
+build
