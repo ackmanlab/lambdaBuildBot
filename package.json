@@ -1,11 +1,12 @@
 {
-  "name": "lambdabuild",
+  "name": "lambdaBuildBot",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "dependencies": {
-    "ip-range-check": "^0.0.2",
-    "tar-fs": "^1.15.3"
+    "request": "^2.81.0",
+    "tar-fs": "^1.15.3",
+    "woola": "git+https://github.com/ackmanlab/woola.git"
   },
   "scripts": {
     "test": "node-lambda run",

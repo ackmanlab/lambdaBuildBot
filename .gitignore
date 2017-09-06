@@ -6,3 +6,4 @@ event_sources.json
 .lambda
 node_modules
 build
+node_modules-dev
