@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
+    "aws-sdk": "^2.111.0",
     "request": "^2.81.0",
     "tar-fs": "^1.15.3",
     "woola": "git+https://github.com/ackmanlab/woola.git"

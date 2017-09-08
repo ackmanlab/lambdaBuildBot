@@ -13,11 +13,13 @@ AWS.config.region = process.env.AWS_REGION
 const s3 = new AWS.S3()
 
 const mdbuild = require('woola')
-const getConfig = require('./node_modules/woola/lib/appconfig.js')
+const appconfig = require('./node_modules/woola/lib/appconfig.js')
 
 const ghtoken = process.env.GITHUB_ACCESS_TOKEN
 const localStore = path.resolve('./tmp')
 // const globPattern = '**/*'
+
+let site
 
 const computeContentType = (filename) => {
   const parts = filename.split('.')
@@ -89,21 +91,20 @@ const uploadStream = (file,s3bucket,srcPath='.') => {
 
 
 
-
-
-
 console.log('Loading lambdaBuildBot, current dir: ' + process.cwd())
 
 exports.handler = function (event, context) {
-  // console.log('Received event:', JSON.stringify(event, null, 2))
+  console.log('Received event:', JSON.stringify(event, null, 2))
   const message = event.Records[0].Sns.Message
   const mobj = JSON.parse(message)
   const archiveURL = mobj.repository.archive_url.replace('{archive_format}{/ref}','tarball/master')
   const repoDirname = localStore + '/' + mobj.repository.full_name.replace('/','-') + '-' + mobj.head_commit.id
-  const site = getConfig({config: repoDirname + '/config.js'})
-  site.options.srcPath = repoDirname //source directory
-  site.options.dstPath = localStore + '/dist' // destination directory for the distribution
-  site.options.globPattern = '**/*'
+
+  //TODO: add optional callback to appconfig/getconfig
+  // const site = getConfig({config: repoDirname + '/config.js'})
+  // site.options.srcPath = path.join(repoDirname, site.options.srcPath) //source directory
+  // site.options.dstPath = localStore + '/dist' // destination directory for the distribution
+  // site.options.globPattern = '**/*'
 
   const reqOptions = {
     url: archiveURL,
@@ -125,6 +126,18 @@ exports.handler = function (event, context) {
         console.log('message: ' + 'success')
       }
   })
+
+  function getConfig(flags={config: repoDirname + '/config.js'}, callback) {
+    site = appconfig(flags)
+    site.options.srcPath = path.join(repoDirname, site.options.srcPath) //source directory
+    site.options.dstPath = localStore + '/dist' // destination directory for the distribution
+    site.options.globPattern = '**/*'
+    if (typeof callback === 'function') {
+      callback(site)
+    } else {
+      return site
+    }
+  }
 
 
   // const getBuild = () => new Promise((resolve) => {
@@ -167,7 +180,7 @@ exports.handler = function (event, context) {
   // })
 
 
-  function readdir (site,callback) {
+  function readdir (site, callback) {
     glob(site.options.globPattern, {cwd: site.options.dstPath, nodir: true}, (err, files) => {
       if (err) console.log(err)
       else { 
@@ -185,17 +198,10 @@ exports.handler = function (event, context) {
 
   function uploadFiles (site, files) {
     files.forEach(file => {
+      // TODO: add other endpoint options with logic for S3 vs other services
       uploadStream(file, site.s3_bucket, site.options.dstPath)
     })
   }
-
-
-  // const readdir = () => new Promise((resolve, reject) => {
-  //     fs.readdir(site.options.dstPath, (err, files) => {
-  //         if (err) reject(err)
-  //         else resolve(files)
-  //     })
-  // })
 
 
   // const buildDataArray = (site, files) => new Promise((resolve, reject) => {
@@ -208,11 +214,6 @@ exports.handler = function (event, context) {
   //   Promise.all(promiseStack).then(resultObj => {
   //     resolve(resultObj)})
   // })
-
-
-  const mylog = (files) => {
-    console.log('files: ' + files)
-  }
 
   const build = function () {
     console.log(`'Saving: '${repoDirname}`)
@@ -236,55 +237,20 @@ exports.handler = function (event, context) {
       // mdbuild(site,readdir)
       // console.log(fnms)
 
-      mdbuild(site,() => {
-        readdir(site, uploadFiles)
+      getConfig({config: repoDirname + '/config.js'}, () => {
+        mdbuild(site,() => {
+          readdir(site, uploadFiles)
+        })
       })
-
-
-      // .then(files => { return buildDataArray(files,site) })
-      // .then(resultsArray => { return console.log(resultsArray) })
-      // .catch (err => { console.log(err) })
-
-      // .then(files => { return handleFiles(files, site) })
-      // .catch (err => { console.log(err) })
-
-      // callback(null, {'message': `more success`})
     } else {
       console.log(repoDirname + ' does not exist')
     }  
   }
   
-  // stream
-  //   .pipe(gunzip)
-  //   .pipe(tar.extract(localStore))
-  //   .on('finish', build)
+  stream
+    .pipe(gunzip)
+    .pipe(tar.extract(localStore))
+    .on('finish', build)
 
-    build()
+    // build()
 }
-
-
-
-
-
-
-
-// const req = (reqOptions) => new Promise((resolve, reject)) => {  
-//   request(reqOptions, (error, response, body) => {
-//     if (error) {
-//         reject(error);
-//       } else if (response && response.statusCode && !response.statusCode.toString().startsWith('2')) {
-//         reject(new Error(`GitHub API request failed with status ${response.statusCode}`));
-//       } else {
-//         resolve(null, {'message': `success`});
-//       }
-//   })
-//   .pipe(gunzip).pipe(tar.extract('./tmp'))
-// }
-
-// const req = (repoDirname) => new Promise((resolve, reject)) => {
-//   if (fs.existsSync(repoDirname)) {
-//     console.log(repoDirname + ' exists!')
-//   } else {
-//     console.log(repoDirname + ' does not exist')
-//   }
-// }
