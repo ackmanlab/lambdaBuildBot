@@ -1,5 +1,6 @@
 .DS_Store
 .env
+deploy.sh
 deploy.env
 event.json
 event_sources.json
@@ -7,3 +8,5 @@ event_sources.json
 node_modules
 build
 node_modules-dev
+tmp
+*.zip
