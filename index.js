@@ -68,18 +68,69 @@ exports.handler = function (event, context) {
   const message = event.Records[0].Sns.Message
   const mobj = JSON.parse(message)
   // console.log(mobj)
-  const archiveURL = mobj.repository.archive_url.replace('{archive_format}{/ref}','tarball/master')
-  const repoDirname = localStore + '/' + mobj.repository.full_name.replace('/','-') + '-' + mobj.head_commit.id
+  // const archiveURL = mobj.repository.archive_url.replace('{archive_format}{/ref}','tarball/master')
+  const downloadsUrl = mobj.repository.contents_url.replace('{+path}', '');
+  // const repoDirname = localStore + '/' + mobj.repository.full_name.replace('/','-') + '-' + mobj.head_commit.id
+  const repoDirname = localStore
 
   const reqOptions = {
-    url: archiveURL,
+    url: downloadsUrl,
     headers: {
       'Authorization': 'token ' + ghtoken,
       'User-Agent': 'ghlambdabot'
     } 
   }
-  console.log(`'Requesting: '${archiveURL}`)
+  console.log(`'Requesting: '${downloadsUrl}`)
   // console.log(`'Saving: '${repoDirname}`)
+
+
+  // const writeFile = (fileName, datain) => new Promise((resolve, reject) => {
+  //   fs.writeFile(fileName, datain, 'utf8', (err, data) => {
+  //     if (err) reject(err)
+  //     else resolve(data)
+  //   })
+  // })
+
+
+
+  // const writeFile = (fileObject) => new Promise((resolve, reject) => {
+  //   request(fileObject.download_url)
+  //   .pipe(fs.createWriteStream(fileObject.name))
+  //   .on(‘finish’, () => {
+  //     s3.upload({
+  //       Bucket: bucketName,
+  //       Key: fileObject.name,
+  //       Body: fs.createReadStream(fileObject.name),
+  //       ACL: ‘public-read’,
+  //       ContentType: computeContentType(fileObject.name),
+  //     }, (error, data) => {
+  //       if (error) throw new Error(error);
+  //       else console.log(data);
+  //     });
+  //  });
+  // });
+
+
+  // let processed = 0;
+  // const updateProgress = (totalCount) => {
+  //   processed++;
+  //   console.log(`Progress: ${processed} out of ${totalCount}`);
+  //    if (processed === totalCount) {
+  //      if (confirmationTopicArn) confirmUpload(callback);
+  //      else callback(null, 'Done!');
+  //    }
+  // }
+
+  const writeStream = (fileObject) => new Promise ((resolve) => {
+    request(fileObject.download_url)
+      .pipe(fs.createWriteStream(localStore + '/' + fileObject.name))
+      .on('finish', () => {
+        console.log(`done writing ${fileObject.name}`)
+      })
+  })
+
+
+
 
   const stream = request(reqOptions, (error, response, body) => {
     if (error) {
@@ -89,6 +140,14 @@ exports.handler = function (event, context) {
       } else {
         // callback(null, {'message': `success`})
         console.log('message: ' + 'success')
+        JSON.parse(body).forEach((fileObject) => {
+          // console.log(fileObject)
+          // const fstream = fs.createWriteStream(fileObject.name)
+          // fstream.end(`done writing ${fileObject.name}`)
+          writeStream(fileObject)
+          .then(() => updateProgress(payload.data.length))
+          .catch((err) => console.log(err, `Error while uploading ${fileObject.name} file to S3`));
+        })
       }
   })
 
@@ -145,9 +204,9 @@ exports.handler = function (event, context) {
 
   if (mobj.ref === "refs/heads/master") {    
     stream
-      .pipe(gunzip)
-      .pipe(tar.extract(localStore))
-      .on('finish', build)
+      // .pipe(gunzip)
+      // .pipe(tar.extract(localStore))
+      // .on('finish', build)
 
       // build() //testing
     } else {
