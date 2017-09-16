@@ -45,7 +45,5 @@ aws lambda update-function-code \
 
 ```
 
-With this workflow you can go from a project update in a git repository on a local computer to a completely rebuilt live static site accessible anywhere in the world within 2-4 s (with a cold invocation, repeated hot invocations would be even faster) giving rise to the possibility for fast asynchronous collaborative updates of complex apps.
-
 
 MIT License
