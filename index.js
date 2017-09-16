@@ -15,7 +15,7 @@ const appconfig = require('./node_modules/woola/lib/appconfig.js')
 
 const ghtoken = process.env.GITHUB_ACCESS_TOKEN
 const localStore = process.env.LOCAL_DIR
-// const localStore = path.resolve('./tmp')
+// const localStore = path.resolve('/tmp')
 // const globPattern = '**/*'
 
 let site
