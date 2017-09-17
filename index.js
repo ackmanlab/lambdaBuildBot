@@ -1,5 +1,6 @@
 const request = require('request')
 const fs = require('fs')
+// const fs = require('fs-extra')
 const path = require('path')
 const glob = require('glob')
 const tar = require('tar-fs')
@@ -64,12 +65,15 @@ const uploadStream = (file,s3bucket,srcPath='.') => {
 console.log('Loading lambdaBuildBot, current dir: ' + process.cwd())
 
 exports.handler = function (event, context) {
-  console.log('Received event:', JSON.stringify(event, null, 2))
+  // console.log('Received event:', JSON.stringify(event, null, 2))
   const message = event.Records[0].Sns.Message
   const mobj = JSON.parse(message)
   // console.log(mobj)
   // const archiveURL = mobj.repository.archive_url.replace('{archive_format}{/ref}','tarball/master')
-  const downloadsUrl = mobj.repository.contents_url.replace('{+path}', '');
+  // const downloadsUrl = mobj.repository.contents_url.replace('{+path}', '');
+  const downloadsUrl = mobj.repository.trees_url.replace('{/sha}', '/master?recursive=1');
+
+  // "trees_url": "https://api.github.com/repos/ackmanlab/ackmanlab/git/trees{/sha}",
   // const repoDirname = localStore + '/' + mobj.repository.full_name.replace('/','-') + '-' + mobj.head_commit.id
   const repoDirname = localStore
 
@@ -80,6 +84,15 @@ exports.handler = function (event, context) {
       'User-Agent': 'ghlambdabot'
     } 
   }
+
+  const reqHeaders = {
+    'Authorization': 'token ' + ghtoken,
+    'User-Agent': 'ghlambdabot',
+    'Accept': 'application/vnd.github-blob.raw'
+  }
+
+
+
   console.log(`'Requesting: '${downloadsUrl}`)
   // console.log(`'Saving: '${repoDirname}`)
 
@@ -110,7 +123,6 @@ exports.handler = function (event, context) {
   //  });
   // });
 
-
   // let processed = 0;
   // const updateProgress = (totalCount) => {
   //   processed++;
@@ -121,34 +133,56 @@ exports.handler = function (event, context) {
   //    }
   // }
 
-  const writeStream = (fileObject) => new Promise ((resolve) => {
-    request(fileObject.download_url)
-      .pipe(fs.createWriteStream(localStore + '/' + fileObject.name))
+  // const writeStream = (fileObject) => new Promise ((resolve) => {
+  //   request({url: fileObject.url, headers: reqHeaders})
+  //     .pipe(fs.createWriteStream(localStore + '/' + fileObject.path))
+  //     .on('finish', () => {
+  //       console.log(`done writing: ${fileObject.path}`)
+  //     })
+  // })
+
+
+  function writeStream(fileObject) {
+    request({url: fileObject.url, headers: reqHeaders})
+      .pipe(fs.createWriteStream(localStore + '/' + fileObject.path))
       .on('finish', () => {
-        console.log(`done writing ${fileObject.name}`)
+        console.log(`done writing: ${fileObject.path}`)
       })
-  })
-
-
-
+  }
 
   const stream = request(reqOptions, (error, response, body) => {
     if (error) {
-        // callback(error)
-      } else if (response && response.statusCode && !response.statusCode.toString().startsWith('2')) {
-        // callback(new Error(`GitHub API request failed with status ${response.statusCode}`));
+      // callback(error)
+      console.log(error)
+    } else if (response && response.statusCode && !response.statusCode.toString().startsWith('2')) {
+      // callback(new Error(`GitHub API request failed with status ${response.statusCode}`))
+      console.log(`GitHub API request failed with status ${response.statusCode}`)
+    } else {
+      // callback(null, {'message': `success`})
+      // console.log('message: ' + 'success')
+      const bodyObj = JSON.parse(body)
+      console.log(bodyObj)
+      if (bodyObj.truncated) {
+        console.log('Too many files for the GitHub tree api, try another portion of api like contents, archive_url, or clone repo')
       } else {
-        // callback(null, {'message': `success`})
-        console.log('message: ' + 'success')
-        JSON.parse(body).forEach((fileObject) => {
+        bodyObj.tree.forEach((fileObject) => {
           // console.log(fileObject)
           // const fstream = fs.createWriteStream(fileObject.name)
           // fstream.end(`done writing ${fileObject.name}`)
-          writeStream(fileObject)
-          .then(() => updateProgress(payload.data.length))
-          .catch((err) => console.log(err, `Error while uploading ${fileObject.name} file to S3`));
+
+          if (fileObject.type === 'blob') {
+            // console.log(fileObject.path)
+            writeStream(fileObject)
+            // .then(() => console.log(`size: ${fileObject.size}`))
+            // .catch((err) => console.log(err, `Error while uploading ${fileObject.path} file to S3`))
+          } else if (fileObject.type === 'tree') {
+            fs.mkdir(localStore + '/' + fileObject.path, () => {console.log(`make dir: ${fileObject.path}`)})
+          } else {
+            console.log('unknown object type returned from GitHub tree api response body')
+          }
         })
       }
+    }
   })
 
   function getConfig(flags={config: repoDirname + '/config.js'}, callback) {
@@ -210,6 +244,6 @@ exports.handler = function (event, context) {
 
       // build() //testing
     } else {
-      console.log(`Exiting without build/deploy...input branch was not master, instead it was ${mobj.ref}`)
+      console.log(`Exiting without build/deploy... input branch was ${mobj.ref} instead of master`)
     }
 }
