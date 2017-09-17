@@ -1,11 +1,7 @@
 const request = require('request')
 const fs = require('fs')
-// const fs = require('fs-extra')
 const path = require('path')
 const glob = require('glob')
-const tar = require('tar-fs')
-const zlib = require('zlib')
-const gunzip = zlib.createGunzip()
 
 const AWS = require('aws-sdk')
 AWS.config.region = process.env.AWS_REGION
@@ -97,28 +93,34 @@ exports.handler = function (event, context) {
       if (bodyObj.truncated) {
         console.log('Too many files for the GitHub tree api, try another portion of api like contents, archive_url, or clone repo')
       } else {
-        bodyObj.tree.forEach((fileObject) => {
-          // console.log(fileObject)
 
-          if (fileObject.type === 'blob') {
-            // console.log(fileObject.path)
-            writeStream(fileObject)
-          } else if (fileObject.type === 'tree') {
-            fs.mkdir(localStore + '/' + fileObject.path, () => {console.log(`make dir: ${fileObject.path}`)})
-          } else {
-            console.log('unknown object type returned from GitHub tree api response body')
-          }
-        })
+        const streamPromises = bodyObj.tree.map((fileObject) => {
+          return new Promise((resolve, reject) => {
+            if (fileObject.type === 'blob') {
+              // console.log(fileObject.path)
+              writeStream(fileObject,resolve,reject)
+            } else if (fileObject.type === 'tree') {
+              resolve( fs.mkdir(localStore + '/' + fileObject.path, () => {console.log(`make dir: ${fileObject.path}`)}) )
+            } else {
+              console.log('unknown object type returned from GitHub tree api response body')
+            }
+          })
+        })  
+
+        Promise.all(streamPromises)
+        .then(() => { console.log('All input streams completed.') })
+        .then(build)
+        .catch (err => { console.log(err) })
+
       }
     }
   })
 
-  function writeStream(fileObject) {
+  function writeStream(fileObject,resolve,reject) {
     request({url: fileObject.url, headers: reqHeaders2})
       .pipe(fs.createWriteStream(localStore + '/' + fileObject.path))
-      .on('finish', () => {
-        console.log(`done writing: ${fileObject.path}`)
-      })
+      .on('finish', resolve)
+      .on('error', reject)
   }
 
   function getConfig(flags={config: repoDirname + '/config.js'}, callback) {
@@ -159,12 +161,11 @@ exports.handler = function (event, context) {
 
 
   const build = function () {
-    console.log(`'Saving: '${repoDirname}`)
+    // console.log(`'Saving: '${repoDirname}`)
     if (fs.existsSync(repoDirname)) {
-      getConfig({config: repoDirname + '/config.js'}, () => {
+      getConfig({config: path.resolve(repoDirname + '/config.js')}, () => {
         mdbuild(site,() => {
-          console.log('build fin')
-          // readdir(site, uploadFiles)
+          readdir(site, uploadFiles)
         })
       })
     } else {
@@ -174,13 +175,7 @@ exports.handler = function (event, context) {
 
   if (mobj.ref === "refs/heads/master") {    
     stream
-    //   .on('finish', build)
-
-      // .pipe(gunzip)
-      // .pipe(tar.extract(localStore))
-      // .on('finish', build)
-
-      // build() //testing
+    // build() //testing
     } else {
       console.log(`Exiting without build/deploy... input branch was ${mobj.ref} instead of master`)
     }
