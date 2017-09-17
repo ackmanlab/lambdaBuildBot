@@ -2,9 +2,6 @@ const request = require('request')
 const fs = require('fs')
 const path = require('path')
 const glob = require('glob')
-const tar = require('tar-fs')
-const zlib = require('zlib')
-const gunzip = zlib.createGunzip()
 
 const AWS = require('aws-sdk')
 AWS.config.region = process.env.AWS_REGION
@@ -64,33 +61,67 @@ const uploadStream = (file,s3bucket,srcPath='.') => {
 console.log('Loading lambdaBuildBot, current dir: ' + process.cwd())
 
 exports.handler = function (event, context) {
-  console.log('Received event:', JSON.stringify(event, null, 2))
+  // console.log('Received event:', JSON.stringify(event, null, 2))
   const message = event.Records[0].Sns.Message
   const mobj = JSON.parse(message)
   // console.log(mobj)
-  const archiveURL = mobj.repository.archive_url.replace('{archive_format}{/ref}','tarball/master')
-  const repoDirname = localStore + '/' + mobj.repository.full_name.replace('/','-') + '-' + mobj.head_commit.id
+  const downloadsUrl = mobj.repository.trees_url.replace('{/sha}', '/master?recursive=1');
+  const repoDirname = localStore
 
-  const reqOptions = {
-    url: archiveURL,
-    headers: {
-      'Authorization': 'token ' + ghtoken,
-      'User-Agent': 'ghlambdabot'
-    } 
+  const reqHeaders1 = {
+    'Authorization': 'token ' + ghtoken,
+    'User-Agent': 'ghlambdabot'
   }
-  console.log(`'Requesting: '${archiveURL}`)
-  // console.log(`'Saving: '${repoDirname}`)
 
-  const stream = request(reqOptions, (error, response, body) => {
+  const reqHeaders2 = {
+    'Authorization': 'token ' + ghtoken,
+    'User-Agent': 'ghlambdabot',
+    'Accept': 'application/vnd.github-blob.raw'
+  }
+
+  console.log(`'Requesting: '${downloadsUrl}`)
+
+  const stream = request({url: downloadsUrl, headers: reqHeaders1}, (error, response, body) => {
     if (error) {
-        // callback(error)
-      } else if (response && response.statusCode && !response.statusCode.toString().startsWith('2')) {
-        // callback(new Error(`GitHub API request failed with status ${response.statusCode}`));
+      console.log(error)
+    } else if (response && response.statusCode && !response.statusCode.toString().startsWith('2')) {
+      console.log(`GitHub API request failed with status ${response.statusCode}`)
+    } else {
+      // console.log('message: ' + 'success')
+      const bodyObj = JSON.parse(body)
+      console.log(bodyObj)
+      if (bodyObj.truncated) {
+        console.log('Too many files for the GitHub tree api, try another portion of api like contents, archive_url, or clone repo')
       } else {
-        // callback(null, {'message': `success`})
-        console.log('message: ' + 'success')
+
+        const streamPromises = bodyObj.tree.map((fileObject) => {
+          return new Promise((resolve, reject) => {
+            if (fileObject.type === 'blob') {
+              // console.log(fileObject.path)
+              writeStream(fileObject,resolve,reject)
+            } else if (fileObject.type === 'tree') {
+              resolve( fs.mkdir(localStore + '/' + fileObject.path, () => {console.log(`make dir: ${fileObject.path}`)}) )
+            } else {
+              console.log('unknown object type returned from GitHub tree api response body')
+            }
+          })
+        })  
+
+        Promise.all(streamPromises)
+        .then(() => { console.log('All input streams completed.') })
+        .then(build)
+        .catch (err => { console.log(err) })
+
       }
+    }
   })
+
+  function writeStream(fileObject,resolve,reject) {
+    request({url: fileObject.url, headers: reqHeaders2})
+      .pipe(fs.createWriteStream(localStore + '/' + fileObject.path))
+      .on('finish', resolve)
+      .on('error', reject)
+  }
 
   function getConfig(flags={config: repoDirname + '/config.js'}, callback) {
     site = appconfig(flags)
@@ -110,7 +141,6 @@ exports.handler = function (event, context) {
       if (err) console.log(err)
       else { 
         // console.log('str: ' + str)
-        // return(mylog(files))
         if (typeof callback === 'function') {
           callback(site, files)
         } else {
@@ -131,9 +161,9 @@ exports.handler = function (event, context) {
 
 
   const build = function () {
-    console.log(`'Saving: '${repoDirname}`)
+    // console.log(`'Saving: '${repoDirname}`)
     if (fs.existsSync(repoDirname)) {
-      getConfig({config: repoDirname + '/config.js'}, () => {
+      getConfig({config: path.resolve(repoDirname + '/config.js')}, () => {
         mdbuild(site,() => {
           readdir(site, uploadFiles)
         })
@@ -145,12 +175,8 @@ exports.handler = function (event, context) {
 
   if (mobj.ref === "refs/heads/master") {    
     stream
-      .pipe(gunzip)
-      .pipe(tar.extract(localStore))
-      .on('finish', build)
-
-      // build() //testing
+    // build() //testing
     } else {
-      console.log(`Exiting without build/deploy...input branch was not master, instead it was ${mobj.ref}`)
+      console.log(`Exiting without build/deploy... input branch was ${mobj.ref} instead of master`)
     }
 }

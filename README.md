@@ -6,7 +6,7 @@ author: James Ackman
 
 lambdaBuildBot– A serverless build and deploy bot for site content.
 
-The idea is that upon commiting content changes to a project, the remote push/synchronization with a master branch of its github repo triggers this bot to build a project and deploy it for you. 
+The idea is to have a quick, automated build and deploy tool for an app using an event driven, functional programming-like architecture. What happens is that upon commiting content changes to a project, a remote push/synchronization event acting on the **master** branch of a GitHub hosted repo triggers this bot to build a project and deploy it for you. 
 
 Currently it is configured to use AWS Lambda and deploy to an S3 bucket, but since the main code is all standard nodejs javascript, one could presumably configure a version compatible with other cloud services (Microsoft Azure, Google, IBM Openwhisk, etc). Installation pulls in woola to use as the javascript markdown/html build tool. 
 
