@@ -69,96 +69,28 @@ exports.handler = function (event, context) {
   const message = event.Records[0].Sns.Message
   const mobj = JSON.parse(message)
   // console.log(mobj)
-  // const archiveURL = mobj.repository.archive_url.replace('{archive_format}{/ref}','tarball/master')
-  // const downloadsUrl = mobj.repository.contents_url.replace('{+path}', '');
   const downloadsUrl = mobj.repository.trees_url.replace('{/sha}', '/master?recursive=1');
-
-  // "trees_url": "https://api.github.com/repos/ackmanlab/ackmanlab/git/trees{/sha}",
-  // const repoDirname = localStore + '/' + mobj.repository.full_name.replace('/','-') + '-' + mobj.head_commit.id
   const repoDirname = localStore
 
-  const reqOptions = {
-    url: downloadsUrl,
-    headers: {
-      'Authorization': 'token ' + ghtoken,
-      'User-Agent': 'ghlambdabot'
-    } 
+  const reqHeaders1 = {
+    'Authorization': 'token ' + ghtoken,
+    'User-Agent': 'ghlambdabot'
   }
 
-  const reqHeaders = {
+  const reqHeaders2 = {
     'Authorization': 'token ' + ghtoken,
     'User-Agent': 'ghlambdabot',
     'Accept': 'application/vnd.github-blob.raw'
   }
 
-
-
   console.log(`'Requesting: '${downloadsUrl}`)
-  // console.log(`'Saving: '${repoDirname}`)
 
-
-  // const writeFile = (fileName, datain) => new Promise((resolve, reject) => {
-  //   fs.writeFile(fileName, datain, 'utf8', (err, data) => {
-  //     if (err) reject(err)
-  //     else resolve(data)
-  //   })
-  // })
-
-
-
-  // const writeFile = (fileObject) => new Promise((resolve, reject) => {
-  //   request(fileObject.download_url)
-  //   .pipe(fs.createWriteStream(fileObject.name))
-  //   .on(‘finish’, () => {
-  //     s3.upload({
-  //       Bucket: bucketName,
-  //       Key: fileObject.name,
-  //       Body: fs.createReadStream(fileObject.name),
-  //       ACL: ‘public-read’,
-  //       ContentType: computeContentType(fileObject.name),
-  //     }, (error, data) => {
-  //       if (error) throw new Error(error);
-  //       else console.log(data);
-  //     });
-  //  });
-  // });
-
-  // let processed = 0;
-  // const updateProgress = (totalCount) => {
-  //   processed++;
-  //   console.log(`Progress: ${processed} out of ${totalCount}`);
-  //    if (processed === totalCount) {
-  //      if (confirmationTopicArn) confirmUpload(callback);
-  //      else callback(null, 'Done!');
-  //    }
-  // }
-
-  // const writeStream = (fileObject) => new Promise ((resolve) => {
-  //   request({url: fileObject.url, headers: reqHeaders})
-  //     .pipe(fs.createWriteStream(localStore + '/' + fileObject.path))
-  //     .on('finish', () => {
-  //       console.log(`done writing: ${fileObject.path}`)
-  //     })
-  // })
-
-
-  function writeStream(fileObject) {
-    request({url: fileObject.url, headers: reqHeaders})
-      .pipe(fs.createWriteStream(localStore + '/' + fileObject.path))
-      .on('finish', () => {
-        console.log(`done writing: ${fileObject.path}`)
-      })
-  }
-
-  const stream = request(reqOptions, (error, response, body) => {
+  const stream = request({url: downloadsUrl, headers: reqHeaders1}, (error, response, body) => {
     if (error) {
-      // callback(error)
       console.log(error)
     } else if (response && response.statusCode && !response.statusCode.toString().startsWith('2')) {
-      // callback(new Error(`GitHub API request failed with status ${response.statusCode}`))
       console.log(`GitHub API request failed with status ${response.statusCode}`)
     } else {
-      // callback(null, {'message': `success`})
       // console.log('message: ' + 'success')
       const bodyObj = JSON.parse(body)
       console.log(bodyObj)
@@ -167,14 +99,10 @@ exports.handler = function (event, context) {
       } else {
         bodyObj.tree.forEach((fileObject) => {
           // console.log(fileObject)
-          // const fstream = fs.createWriteStream(fileObject.name)
-          // fstream.end(`done writing ${fileObject.name}`)
 
           if (fileObject.type === 'blob') {
             // console.log(fileObject.path)
             writeStream(fileObject)
-            // .then(() => console.log(`size: ${fileObject.size}`))
-            // .catch((err) => console.log(err, `Error while uploading ${fileObject.path} file to S3`))
           } else if (fileObject.type === 'tree') {
             fs.mkdir(localStore + '/' + fileObject.path, () => {console.log(`make dir: ${fileObject.path}`)})
           } else {
@@ -184,6 +112,14 @@ exports.handler = function (event, context) {
       }
     }
   })
+
+  function writeStream(fileObject) {
+    request({url: fileObject.url, headers: reqHeaders2})
+      .pipe(fs.createWriteStream(localStore + '/' + fileObject.path))
+      .on('finish', () => {
+        console.log(`done writing: ${fileObject.path}`)
+      })
+  }
 
   function getConfig(flags={config: repoDirname + '/config.js'}, callback) {
     site = appconfig(flags)
@@ -203,7 +139,6 @@ exports.handler = function (event, context) {
       if (err) console.log(err)
       else { 
         // console.log('str: ' + str)
-        // return(mylog(files))
         if (typeof callback === 'function') {
           callback(site, files)
         } else {
@@ -228,7 +163,8 @@ exports.handler = function (event, context) {
     if (fs.existsSync(repoDirname)) {
       getConfig({config: repoDirname + '/config.js'}, () => {
         mdbuild(site,() => {
-          readdir(site, uploadFiles)
+          console.log('build fin')
+          // readdir(site, uploadFiles)
         })
       })
     } else {
@@ -238,6 +174,8 @@ exports.handler = function (event, context) {
 
   if (mobj.ref === "refs/heads/master") {    
     stream
+    //   .on('finish', build)
+
       // .pipe(gunzip)
       // .pipe(tar.extract(localStore))
       // .on('finish', build)
