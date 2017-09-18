@@ -123,9 +123,11 @@ exports.handler = function (event, context) {
       .on('error', reject)
   }
 
-  function getConfig(flags={config: repoDirname + '/config.js'}, callback) {
+  function getConfig(flags={config: localStore + '/config.js'}, callback) {
     site = appconfig(flags)
-    site.options.srcPath = path.join(repoDirname, site.options.srcPath) //source directory
+    // TODO: global let bug for site.options.srcPath in appconfig.js upon hot start invocation, tmp fix follows
+    // site.options.srcPath = path.join(localStore, site.options.srcPath) //source directory
+    site.options.srcPath = localStore + '/src' //source directory
     site.options.dstPath = localStore + '/dist' // destination directory for the distribution
     site.options.globPattern = '**/*'
     if (typeof callback === 'function') {
@@ -162,8 +164,8 @@ exports.handler = function (event, context) {
 
   const build = function () {
     // console.log(`'Saving: '${repoDirname}`)
-    if (fs.existsSync(repoDirname)) {
-      getConfig({config: path.resolve(repoDirname + '/config.js')}, () => {
+    if (fs.existsSync(localStore)) {
+      getConfig({config: path.resolve(localStore + '/config.js')}, () => {
         mdbuild(site,() => {
           readdir(site, uploadFiles)
         })
