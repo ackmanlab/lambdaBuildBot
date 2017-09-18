@@ -18,18 +18,18 @@ Have node/npm installed on your local machine then:
     npm install https://github.com/ackmanlab/lambdaBuildBot.git
 
 
-## Testing
+### Local testing 
 
 For testing on your local machine, [node-lambda](https://www.npmjs.com/package/node-lambda) is a useful dependency for development. Just follow its directions for making a .env file in your lambdaBuildBot directory and set up keys/values for AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, GITHUB_ACCESS_TOKEN, as well as LOCAL_DIR (`LOCAL_DIR=./tmp`).
 
-For AWS:
+### Deploy to AWS
 
 1. Get an AWS account setup and S3 bucket configured (see Amazon documentation).
 2. Get a github access token.
-3. Create a lambda function with the name lambdaBuildBot. 
+3. Use the AWS web console to create a lambda function with the name lambdaBuildBot. 
     * set the function up with at least 1024 MB memory so it will run fastest (cpu speed is tied to memory request requirement for lambda).
-    * set a GITHUB_ACCESS_TOKEN environment variable.
-4. Update function... if you have make a file called 'deploy.sh' with the following contents in your lambdaBuildBot directory and you have aws-cli installed then you can just run `npm deploy`:  
+    * set up environment variables for GITHUB_ACCESS_TOKEN and `LOCAL_DIR=/tmp`.
+4. Update the function... if you make a file called 'deploy.sh' with the following contents in your lambdaBuildBot directory and you have aws-cli installed then you can just run `npm deploy`:  
 
 
 ```bash
